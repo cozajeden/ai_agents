@@ -1,65 +1,66 @@
-import pytest
-from fastapi.testclient import TestClient
-from sqlmodel import SQLModel, create_engine, Session
-import sys
 import os
+from urllib.parse import urlsplit, urlunsplit, SplitResult
+import pytest
+from sqlmodel import create_engine
+import time
+from fastapi.testclient import TestClient
+from app import main
 
-# Add the app directory to Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+# Global test DB configuration derived from production DATABASE_URL
+PROD_DB_URL = os.environ.get("DATABASE_URL")
+if not PROD_DB_URL:
+    raise RuntimeError("DATABASE_URL env var must be set for tests")
 
-from main import app
-from database import get_db
+_SPLIT = urlsplit(PROD_DB_URL)
+_BASE_DB_NAME = _SPLIT.path.lstrip("/")
+if not _BASE_DB_NAME:
+    raise RuntimeError("DATABASE_URL must include a database name")
 
-# Test database - use PostgreSQL test database
-TEST_DATABASE_URL = os.getenv(
-    "TEST_DATABASE_URL", 
-    "postgresql://ollama_user:ollama_password@postgres:5432/ollama_fastapi_test"
-)
+TEST_DB_NAME = f"{_BASE_DB_NAME}_test"
+_TEST_SPLIT = SplitResult(_SPLIT.scheme, _SPLIT.netloc, f"/{TEST_DB_NAME}", _SPLIT.query, _SPLIT.fragment)
+TEST_DB_URL = urlunsplit(_TEST_SPLIT)
+_ADMIN_SPLIT = SplitResult(_SPLIT.scheme, _SPLIT.netloc, "/postgres", _SPLIT.query, _SPLIT.fragment)
+ADMIN_URL = urlunsplit(_ADMIN_SPLIT)
 
-# Create test engine
-test_engine = create_engine(
-    TEST_DATABASE_URL,
-    echo=False,
-    pool_pre_ping=True,
-    pool_recycle=300,
-)
+
+def set_up_tests():
+    print("tests started")
+    # Point the app to the derived test database for the duration of tests
+    os.environ["DATABASE_URL"] = TEST_DB_URL
+
+    # Create the test database if it doesn't exist
+    admin_engine = create_engine(ADMIN_URL, pool_pre_ping=True, isolation_level="AUTOCOMMIT")
+    with admin_engine.connect() as conn:
+        exists = conn.exec_driver_sql(
+            f"SELECT 1 FROM pg_database WHERE datname = '{TEST_DB_NAME}'"
+        ).scalar() is not None
+        if not exists:
+            conn.exec_driver_sql(f"CREATE DATABASE \"{TEST_DB_NAME}\"")
+    print(f"Test database {TEST_DB_NAME} created")
+    time.sleep(30)
+
+
+def tear_down_tests():
+    print("tests finished")
+    # Drop the derived test database
+    admin_engine = create_engine(ADMIN_URL, pool_pre_ping=True, isolation_level="AUTOCOMMIT")
+    with admin_engine.connect() as conn:
+        # Terminate active connections to allow drop
+        conn.exec_driver_sql(
+            f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{TEST_DB_NAME}' AND pid <> pg_backend_pid()"
+        )
+        conn.exec_driver_sql(f"DROP DATABASE IF EXISTS \"{TEST_DB_NAME}\"")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _session_setup_teardown():
+    set_up_tests()
+    yield
+    tear_down_tests()
+
 
 @pytest.fixture(scope="function")
-def db_session():
-    """Create a fresh database session for each test"""
-    # Create all tables for testing
-    SQLModel.metadata.create_all(test_engine)
-    
-    with Session(test_engine) as session:
-        yield session
-    
-    # Clean up - drop all tables after test
-    SQLModel.metadata.drop_all(test_engine)
-
-@pytest.fixture(scope="function")
-def client(db_session):
-    """Create a test client with database dependency override"""
-    def override_get_db():
-        yield db_session
-    
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
-
-@pytest.fixture
-def sample_chat_request():
-    """Sample chat request data for testing"""
-    return {
-        "message": "Hello, how are you?",
-        "model_name": "llama3.1:8b"
-    }
-
-@pytest.fixture
-def sample_model_request():
-    """Sample model request data for testing"""
-    return {
-        "model_name": "test-model",
-        "prompt": "Test prompt",
-        "status": "pending"
-    }
+def client():
+    """FastAPI TestClient bound to the app. Uses app lifespan (DB init/close)."""
+    with TestClient(main.app) as c:
+        yield c

@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from database import init_db, close_db
+from .database import init_db, close_db
+from .routers.models.ollama import router as ollama_models_router
+from .routers.database_models import router as database_models_router
+from .routers import chat
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -19,11 +22,6 @@ app = FastAPI(
     docs_url="/",
     lifespan=lifespan
 )
-
-# Import and include routers here
-from routers.models.ollama import router as ollama_models_router
-from routers.database_models import router as database_models_router
-from routers import chat
 
 # Ollama model management routes
 app.include_router(ollama_models_router, prefix="/api/v1/ollama/models", tags=["ollama-models"])

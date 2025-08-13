@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from typing import List
 from datetime import datetime, timezone
-from database import get_db
-from models.base import ModelRequest
+from ..database import get_db
+from ..models.base import ModelRequest
 
 router = APIRouter()
 

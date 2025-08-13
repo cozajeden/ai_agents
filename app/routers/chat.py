@@ -2,9 +2,9 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
 from sqlmodel import Session
-from agents.chat_agent import OllamaChatAgent
-from database import get_db
-from models.base import ChatInteraction
+from ..agents.chat_agent import OllamaChatAgent
+from ..database import get_db
+from ..models.base import ChatInteraction
 import json
 import time
 import uuid
