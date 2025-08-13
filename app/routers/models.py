@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from typing import List
-from datetime import datetime
+from datetime import datetime, timezone
 from database import get_db
 from models.base import ModelRequest
 
@@ -51,7 +51,7 @@ def update_model_request(
     for field, value in request_update.dict(exclude_unset=True).items():
         setattr(db_request, field, value)
     
-    db_request.updated_at = datetime.utcnow()
+    db_request.updated_at = datetime.now(timezone.utc)
     db.add(db_request)
     db.commit()
     db.refresh(db_request)
