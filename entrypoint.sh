@@ -2,7 +2,8 @@
 set -eu
 
 # Configurable via environment
-MODEL="${MODEL:-gpt-oss:20b}"
+#MODEL="${MODEL:-gpt-oss:20b}"
+MODEL="${MODEL:-llama3.1:8b}"
 
 echo "Starting default command (ollama serve) and post-start setup..."
 

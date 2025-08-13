@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+pydantic
+python-multipart
+sqlmodel
+langgraph
+langchain
+langchain-community
+langchain-core
+langchain-ollama
+httpx
