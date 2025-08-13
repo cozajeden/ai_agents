@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  postgres-test:
+    image: postgres:latest
+    container_name: postgres-test
+    environment:
+      POSTGRES_DB: ollama_fastapi_test
+      POSTGRES_USER: ollama_user
+      POSTGRES_PASSWORD: ollama_password
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"  # Different port for testing
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ollama_user -d ollama_fastapi_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  fastapi-test:
+    build: ./app
+    container_name: fastapi-test
+    environment:
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      PYTHONPATH: "/app"
+      DATABASE_URL: "postgresql://ollama_user:ollama_password@postgres-test:5432/ollama_fastapi_test"
+      TEST_DATABASE_URL: "postgresql://ollama_user:ollama_password@postgres-test:5432/ollama_fastapi_test"
+    volumes:
+      - ./app:/app
+      - fastapi_test_data:/app/data
+    command: ["pytest", "-v", "--tb=short", "--cov=app", "--cov-report=term-missing"]
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    networks:
+      - test-network
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama-test
+    ports:
+      - "11435:11434"  # Different port for testing
+    volumes:
+      - ollama_test_data:/root/.ollama
+    environment:
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_KEEP_ALIVE: "2m"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - test-network
+
+volumes:
+  postgres_test_data:
+    name: postgres_test_data
+  fastapi_test_data:
+    name: fastapi_test_data
+  ollama_test_data:
+    name: ollama_test_data
+
+networks:
+  test-network:
+    driver: bridge

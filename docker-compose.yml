@@ -1,22 +1,35 @@
+version: '3.8'
+
 services:
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    environment:
+      POSTGRES_DB: ollama_fastapi
+      POSTGRES_USER: ollama_user
+      POSTGRES_PASSWORD: ollama_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ollama_user -d ollama_fastapi"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
-    entrypoint: ["/bin/sh", "/entrypoint.sh"]
-    command: []
-    runtime: nvidia
-    gpus: all
     ports:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-      - ./entrypoint.sh:/entrypoint.sh:ro
     environment:
       OLLAMA_NUM_PARALLEL: "1"
       OLLAMA_MAX_LOADED_MODELS: "1"
       OLLAMA_KEEP_ALIVE: "5m"
-      NVIDIA_VISIBLE_DEVICES: "all"
-      NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
     deploy:
       resources:
         reservations:
@@ -24,6 +37,14 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     restart: unless-stopped
 
   n8n:
@@ -35,6 +56,9 @@ services:
       - "5678:5678"
     environment:
       OLLAMA_BASE_URL: "http://ollama:11434"
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: "admin"
+      N8N_BASIC_AUTH_PASSWORD: "password"
     volumes:
       - n8n_data:/home/node/.n8n
     restart: unless-stopped
@@ -43,15 +67,18 @@ services:
     build: ./app
     container_name: fastapi
     depends_on:
-      - ollama
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "8000:8000"
     environment:
       OLLAMA_BASE_URL: "http://ollama:11434"
+      DATABASE_URL: "postgresql://ollama_user:ollama_password@postgres:5432/ollama_fastapi"
     volumes:
       - fastapi_data:/app/data
-      - ./app:/app/
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -61,6 +88,8 @@ services:
     restart: unless-stopped
 
 volumes:
+  postgres_data:
+    name: postgres_data
   ollama_data:
     name: ollama_data
   n8n_data:

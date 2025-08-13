@@ -9,3 +9,9 @@ langchain-community
 langchain-core
 langchain-ollama
 httpx
+pytest
+pytest-asyncio
+pytest-cov
+pytest-mock
+psycopg2-binary
+asyncpg
