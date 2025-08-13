@@ -8,10 +8,8 @@ from .routers import chat
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
-    # Startup
     await init_db()
     yield
-    # Shutdown
     await close_db()
 
 app = FastAPI(
@@ -23,14 +21,9 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Ollama model management routes
-app.include_router(ollama_models_router, prefix="/api/v1/ollama/models", tags=["ollama-models"])
-
-# Database models routes
-app.include_router(database_models_router, prefix="/api/v1/models", tags=["database-models"])
-
-# Chat routes
-app.include_router(chat.router, prefix="/api/v1/ollama/chat", tags=["ollama-chat"])
+app.include_router(ollama_models_router, prefix="/ollama/models", tags=["ollama-models"])
+app.include_router(database_models_router, prefix="/models", tags=["database-models"])
+app.include_router(chat.router, prefix="/chat", tags=["chat"])
 
 @app.get("/")
 async def root():

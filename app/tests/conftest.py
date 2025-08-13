@@ -5,7 +5,6 @@ from sqlmodel import create_engine, Session
 from fastapi.testclient import TestClient
 from app import main
 
-# Global test DB configuration derived from production DATABASE_URL
 PROD_DB_URL = os.environ.get("DATABASE_URL")
 if not PROD_DB_URL:
     raise RuntimeError("DATABASE_URL env var must be set for tests")

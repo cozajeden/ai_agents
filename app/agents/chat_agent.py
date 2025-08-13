@@ -5,7 +5,6 @@ from langchain_ollama import OllamaLLM
 import json
 import os
 
-# State definition for the chat agent
 class ChatState(TypedDict):
     messages: List[BaseMessage]
     model_name: str
@@ -30,7 +29,6 @@ class OllamaChatAgent:
                 else:
                     self.available_models = ["llama3.1:8b", "gpt-oss:20b", "mistral:7b"]
         except Exception:
-            # Fallback models if we can't fetch from Ollama
             self.available_models = ["llama3.1:8b", "gpt-oss:20b", "mistral:7b"]
     
     def get_available_models(self) -> List[str]:
@@ -48,19 +46,15 @@ class OllamaChatAgent:
     def chat_node(self, state: ChatState) -> ChatState:
         """Main chat processing node"""
         try:
-            # Get the last human message
             messages = state["messages"]
             if not messages or not isinstance(messages[-1], HumanMessage):
                 state["error"] = "No valid human message found"
                 return state
             
-            # Create LLM instance
             llm = self.create_llm(state["model_name"])
             
-            # Process the message
             response = llm.invoke(messages)
             
-            # Add AI response to messages
             ai_message = AIMessage(content=response)
             messages.append(ai_message)
             
@@ -78,20 +72,16 @@ class OllamaChatAgent:
         """Create the LangGraph workflow"""
         workflow = StateGraph(ChatState)
         
-        # Add the chat node
         workflow.add_node("chat", self.chat_node)
         
-        # Set the entry point
         workflow.set_entry_point("chat")
         
-        # Set the end point
         workflow.add_edge("chat", END)
         
         return workflow.compile()
     
     def chat(self, message: str, model_name: str, conversation_history: List[Dict] = None) -> Dict[str, Any]:
         """Process a chat message and return response"""
-        # Validate model
         if model_name not in self.available_models:
             return {
                 "error": f"Model {model_name} not available. Available models: {self.available_models}",
@@ -99,7 +89,6 @@ class OllamaChatAgent:
                 "model_name": model_name
             }
         
-        # Prepare messages
         messages = []
         if conversation_history:
             for msg in conversation_history:
@@ -114,13 +103,10 @@ class OllamaChatAgent:
                 elif role == "assistant" and content:
                     messages.append(AIMessage(content=content))
                 else:
-                    # Skip invalid messages
                     continue
         
-        # Add current message
         messages.append(HumanMessage(content=message))
         
-        # Create initial state
         initial_state = ChatState(
             messages=messages,
             model_name=model_name,
@@ -128,7 +114,6 @@ class OllamaChatAgent:
             error=""
         )
         
-        # Execute the graph
         try:
             graph = self.create_graph()
             final_state = graph.invoke(initial_state)

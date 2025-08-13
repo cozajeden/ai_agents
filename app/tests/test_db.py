@@ -1,5 +1,5 @@
 import os
-from sqlmodel import create_engine, Session, select
+from sqlmodel import select
 
 
 def test_test_db(session):

@@ -13,14 +13,12 @@ def get_model_requests(
     limit: int = 100, 
     db: Session = Depends(get_db)
 ):
-    """Get all model requests with pagination"""
     statement = select(ModelRequest).offset(skip).limit(limit)
     requests = db.exec(statement).all()
     return requests
 
 @router.get("/{request_id}", response_model=ModelRequest)
 def get_model_request(request_id: str, db: Session = Depends(get_db)):
-    """Get a specific model request by ID"""
     statement = select(ModelRequest).where(ModelRequest.request_id == request_id)
     request = db.exec(statement).first()
     if not request:
@@ -29,7 +27,6 @@ def get_model_request(request_id: str, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=ModelRequest)
 def create_model_request(request: ModelRequest, db: Session = Depends(get_db)):
-    """Create a new model request"""
     db.add(request)
     db.commit()
     db.refresh(request)
@@ -41,14 +38,12 @@ def update_model_request(
     request_update: ModelRequest, 
     db: Session = Depends(get_db)
 ):
-    """Update a model request"""
     statement = select(ModelRequest).where(ModelRequest.request_id == request_id)
     db_request = db.exec(statement).first()
     if not db_request:
         raise HTTPException(status_code=404, detail="Model request not found")
     
-    # Update fields
-    for field, value in request_update.dict(exclude_unset=True).items():
+    for field, value in request_update.model_dump(exclude_unset=True).items():
         setattr(db_request, field, value)
     
     db_request.updated_at = datetime.now(timezone.utc)
@@ -59,7 +54,6 @@ def update_model_request(
 
 @router.delete("/{request_id}")
 def delete_model_request(request_id: str, db: Session = Depends(get_db)):
-    """Delete a model request"""
     statement = select(ModelRequest).where(ModelRequest.request_id == request_id)
     request = db.exec(statement).first()
     if not request:

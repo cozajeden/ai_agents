@@ -11,13 +11,12 @@ import uuid
 
 router = APIRouter()
 
-# Initialize the chat agent
 chat_agent = OllamaChatAgent()
 
 class ChatRequest(BaseModel):
     message: str
     model_name: str
-    session_id: Optional[str] = None  # Auto-generated if not provided
+    session_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -33,21 +32,17 @@ def chat_with_model(request: ChatRequest, db: Session = Depends(get_db)):
     start_time = time.time()
     
     try:
-        # Validate input
         if not request.message.strip():
             raise HTTPException(status_code=400, detail="Message cannot be empty")
         
         if not request.model_name:
             raise HTTPException(status_code=400, detail="Model name is required")
         
-        # Generate session_id if not provided
         if not request.session_id:
             request.session_id = str(uuid.uuid4())
         
-        # Retrieve conversation history from database if session_id exists
         conversation_history = []
         if request.session_id:
-            # Get previous chat interactions for this session
             from sqlmodel import select
             statement = select(ChatInteraction).where(
                 ChatInteraction.session_id == request.session_id
@@ -56,31 +51,26 @@ def chat_with_model(request: ChatRequest, db: Session = Depends(get_db)):
             previous_interactions = db.exec(statement).all()
             
             for interaction in previous_interactions:
-                # Add user message
                 conversation_history.append({
                     "role": "user",
                     "content": interaction.user_message
                 })
-                # Add assistant response
                 conversation_history.append({
                     "role": "assistant", 
                     "content": interaction.ai_response
                 })
         
-        # Process the chat request
         result = chat_agent.chat(
             message=request.message,
             model_name=request.model_name,
             conversation_history=conversation_history
         )
         
-        # Check for errors
         if result.get("error"):
             raise HTTPException(status_code=400, detail=result["error"])
         
         processing_time = time.time() - start_time
         
-        # Save chat interaction to database
         chat_interaction = ChatInteraction(
             session_id=request.session_id,
             model_name=result["model_name"],
