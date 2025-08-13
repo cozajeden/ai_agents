@@ -9,39 +9,43 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
-    
-    - name: Prepare environment
+
+    - name: Build and start stack
       run: |
-        echo "Setting up test environment..."
-        docker --version
-        docker-compose --version
-    
-    - name: Build test images
+        docker compose version
+        docker compose up -d --build
+        docker ps
+
+    - name: Wait for services to be healthy
       run: |
-        docker-compose -f docker-compose-test.yml build
-    
-    - name: Run tests
+        set -e
+        # wait for postgres
+        for i in {1..60}; do
+          if docker inspect --format='{{json .State.Health.Status}}' postgres | grep -q healthy; then
+            echo "postgres is healthy"; break; fi; sleep 2; done
+        # wait for ollama
+        for i in {1..60}; do
+          if docker inspect --format='{{json .State.Health.Status}}' ollama | grep -q healthy; then
+            echo "ollama is healthy"; break; fi; sleep 2; done
+        # wait for fastapi (http health)
+        for i in {1..60}; do
+          if docker exec fastapi curl -sf http://localhost:8000/health >/dev/null; then
+            echo "fastapi healthy"; break; fi; sleep 2; done
+
+    - name: Run tests inside fastapi container
+      env:
+        PYTEST_ADDOPTS: "-q -s"
       run: |
-        docker-compose -f docker-compose-test.yml up --abort-on-container-exit --exit-code-from fastapi-test
-    
-    - name: Upload test results
-      uses: actions/upload-artifact@v3
-      if: always()
-      with:
-        name: test-results
-        path: |
-          app/test.db
-          app/.coverage
-        retention-days: 7
-    
+        docker exec fastapi pytest
+
     - name: Cleanup
       if: always()
       run: |
-        docker-compose -f docker-compose-test.yml down -v
-        docker system prune -f
+        docker compose down -v
+        docker system prune -af

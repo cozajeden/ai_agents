@@ -24,12 +24,9 @@ A FastAPI application that integrates with Ollama for AI model management and in
 │   │   ├── __init__.py
 │   │   └── chat_agent.py # Ollama chat agent implementation
 │   ├── tests/            # Test suite
-│   │   ├── __init__.py
 │   │   ├── conftest.py   # Pytest configuration and fixtures
-│   │   ├── pytest.ini    # Pytest settings
-│   │   ├── unit/         # Unit tests
-│   │   ├── integration/  # Integration tests
-│   │   └── e2e/          # End-to-end tests
+│   │   ├── test_smoke.py
+│   │   └── test_db.py
 │   └── .dockerignore     # Docker build optimization
 ├── docker-compose.yml     # Multi-service orchestration
 ├── docker-compose-test.yml # Test environment configuration
@@ -43,7 +40,7 @@ A FastAPI application that integrates with Ollama for AI model management and in
 - **postgres**: PostgreSQL database server for persistent data storage
 - **ollama**: AI model server with GPU support and VRAM management
 - **n8n**: Workflow automation platform
-- **fastapi**: Python FastAPI application with clean, separated modules
+- **fastapi**: Python FastAPI application with clean, separated modules (runs `uvicorn app.main:app`)
 
 ## Database
 
@@ -62,38 +59,44 @@ The project uses **PostgreSQL** as the primary database:
 
 ## Testing Framework
 
+Tests use FastAPI TestClient and SQLModel (no direct SQLAlchemy calls, no network mocks by default).
+
 ### Local Testing
 ```bash
 # Run all tests
-docker exec fastapi pytest
+docker exec fastapi pytest -q -s
 
-# Run specific test categories
-docker exec fastapi pytest tests/unit/ -v
-docker exec fastapi pytest tests/integration/ -v
-docker exec fastapi pytest tests/e2e/ -v
-
-# Run with coverage
-docker exec fastapi pytest --cov=app --cov-report=html
+# Run with verbose output
+docker exec fastapi pytest -v
 ```
 
-### CI/CD Testing
-The project uses GitHub Actions with the following workflow:
-1. **Prepare environment** - Set up Docker and dependencies
-2. **Build images** - Build from `docker-compose-test.yml`
-3. **Run tests** - Execute test suite inside containers
-4. **Upload results** - Store test artifacts and coverage reports
+### Test Database Lifecycle
+- Tests do not use special TEST_* env vars.
+- The test DB URL is derived from `DATABASE_URL` by appending `_test` to the database name (e.g., `/ollama_fastapi_test`).
+- On test session start, the `_test` database is created if missing; on session end it is dropped.
 
-### Test Structure
-- **Unit Tests** (`tests/unit/`) - Test individual components in isolation
-- **Integration Tests** (`tests/integration/`) - Test component interactions
-- **End-to-End Tests** (`tests/e2e/`) - Test complete workflows
-- **Fixtures** (`conftest.py`) - Shared test data and setup
+### Optional: Testcontainers for PostgreSQL
+If you prefer an ephemeral Postgres started by tests, enable testcontainers:
+- Mount Docker socket to the `fastapi` container and add dependencies.
+- docker-compose `fastapi` service additions:
+```yaml
+services:
+  fastapi:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+```
+- Add to `app/requirements.txt`:
+```
+docker
+testcontainers
+```
+When the Docker socket is available, tests will use a `postgres:16` container automatically. Otherwise, they fall back to the derived `_test` database.
 
-### TDD Approach
-- Tests are written before implementing features
-- Comprehensive coverage of all endpoints and business logic
-- Mock external dependencies for reliable testing
-- Database tests use isolated PostgreSQL test database
+### Test Files
+- `tests/test_smoke.py`: basic smoke assertion
+- `tests/test_db.py`: validates SQLModel connectivity and simple CRUD against the test DB
 
 ## API Structure
 
@@ -132,7 +135,7 @@ The project uses GitHub Actions with the following workflow:
 
 3. **Run tests:**
    ```bash
-   docker exec fastapi pytest -v
+   docker exec fastapi pytest -q -s
    ```
 
 ## VRAM Management
@@ -167,7 +170,7 @@ curl -X POST "http://localhost:8000/api/v1/ollama/chat/" \
 
 ## Environment Variables
 
-- `DATABASE_URL`: PostgreSQL connection string
+- `DATABASE_URL`: PostgreSQL connection string (tests derive the `_test` DB from this)
 - `OLLAMA_BASE_URL`: Ollama service URL (default: http://ollama:11434)
 - `OLLAMA_NUM_PARALLEL`: Number of parallel model operations
 - `OLLAMA_MAX_LOADED_MODELS`: Maximum models to keep in memory
@@ -178,7 +181,7 @@ curl -X POST "http://localhost:8000/api/v1/ollama/chat/" \
 - **Separation of Concerns**: Model management, chat, and database operations are separate
 - **Maintainability**: Each module has a single responsibility
 - **Scalability**: Easy to add new features without affecting existing code
-- **Testing**: Each module can be tested independently with comprehensive test coverage
+- **Testing**: Each module can be tested independently with minimal, fast tests
 - **Documentation**: Clear API structure with logical grouping
 - **CI/CD**: Automated testing and deployment pipeline
 - **Database**: Robust PostgreSQL backend with connection pooling and health checks
