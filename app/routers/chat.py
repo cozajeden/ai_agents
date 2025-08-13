@@ -7,16 +7,12 @@ from database import get_db
 from models.base import ChatInteraction
 import json
 import time
+import uuid
 
 router = APIRouter()
 
 # Initialize the chat agent
 chat_agent = OllamaChatAgent()
-
-class ConversationMessage(BaseModel):
-    """Individual message in conversation history"""
-    role: str = "user"  # "user" or "assistant"
-    content: str
 
 class ChatRequest(BaseModel):
     message: str
@@ -27,23 +23,11 @@ class ChatResponse(BaseModel):
     response: str
     error: str
     model_name: str
-    conversation_history: List[ConversationMessage]
+    conversation_history: List[dict]
     session_id: str
     processing_time: float
 
-class ModelsResponse(BaseModel):
-    models: List[str]
-
-@router.get("/models", response_model=ModelsResponse)
-def get_available_models():
-    """Get list of available Ollama models"""
-    try:
-        models = chat_agent.get_available_models()
-        return ModelsResponse(models=models)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch models: {str(e)}")
-
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/", response_model=ChatResponse)
 def chat_with_model(request: ChatRequest, db: Session = Depends(get_db)):
     """Chat with an Ollama model using LangGraph"""
     start_time = time.time()
@@ -58,7 +42,6 @@ def chat_with_model(request: ChatRequest, db: Session = Depends(get_db)):
         
         # Generate session_id if not provided
         if not request.session_id:
-            import uuid
             request.session_id = str(uuid.uuid4())
         
         # Retrieve conversation history from database if session_id exists

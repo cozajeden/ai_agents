@@ -8,15 +8,18 @@ A FastAPI application that integrates with Ollama for AI model management and in
 ├── app/                    # FastAPI service (self-contained)
 │   ├── Dockerfile         # Container definition
 │   ├── requirements.txt   # Python dependencies
-│   ├── main.py           # FastAPI entrypoint
-│   ├── database.py       # Database configuration
+│   ├── main.py           # FastAPI entrypoint and router configuration
+│   ├── database.py       # Database configuration and session management
 │   ├── models/           # Data models
 │   │   ├── __init__.py
 │   │   └── base.py       # Base models and mixins
-│   ├── routers/          # API routes
+│   ├── routers/          # API route modules
 │   │   ├── __init__.py
-│   │   ├── models.py     # Model request CRUD operations
-│   │   └── chat.py       # LangGraph chat agent endpoints
+│   │   ├── models/       # Model management routes
+│   │   │   ├── __init__.py
+│   │   │   └── ollama.py # Ollama model management API
+│   │   ├── models.py     # Database model CRUD operations
+│   │   └── chat.py       # Chat agent API endpoints
 │   ├── agents/           # LangGraph agents
 │   │   ├── __init__.py
 │   │   └── chat_agent.py # Ollama chat agent implementation
@@ -28,9 +31,29 @@ A FastAPI application that integrates with Ollama for AI model management and in
 
 ## Services
 
-- **ollama**: AI model server with GPU support
+- **ollama**: AI model server with GPU support and VRAM management
 - **n8n**: Workflow automation platform
-- **fastapi**: Python FastAPI application with SQLModel ORM and LangGraph
+- **fastapi**: Python FastAPI application with clean, separated modules
+
+## API Structure
+
+### Ollama Model Management (`/api/v1/ollama/models`)
+- `GET /` - List available Ollama models
+- `POST /{model_name}/load` - Load model into VRAM
+- `DELETE /{model_name}/unload` - Unload model from VRAM
+- `GET /status` - Get models status and VRAM usage
+- `GET /health` - Ollama service health check
+
+### Chat API (`/api/v1/ollama/chat`)
+- `POST /` - Chat with an Ollama model using LangGraph
+- `GET /health` - Chat service health check
+
+### Database Models (`/api/v1/models`)
+- `GET /` - List all model requests
+- `GET /{request_id}` - Get specific model request
+- `POST /` - Create new model request
+- `PUT /{request_id}` - Update model request
+- `DELETE /{request_id}` - Delete model request
 
 ## Quick Start
 
@@ -42,57 +65,22 @@ A FastAPI application that integrates with Ollama for AI model management and in
 2. **Access services:**
    - FastAPI: http://localhost:8000
    - FastAPI docs: http://localhost:8000/docs
-   - Models API: http://localhost:8000/api/v1/models
-   - Chat API: http://localhost:8000/api/v1/ollama
-   - n8n: http://localhost:5678
-   - Ollama: http://localhost:11434
+   - Ollama Models: http://localhost:8000/api/v1/ollama/models
+   - Chat API: http://localhost:8000/api/v1/ollama/chat
+   - Database Models: http://localhost:8000/api/v1/models
 
-3. **View logs:**
-   ```bash
-   docker compose logs -f fastapi
-   ```
+## VRAM Management
 
-## Development
-
-- **Local development:**
-  ```bash
-  cd app
-  pip install -r requirements.txt
-  uvicorn main:app --reload --host 0.0.0.0 --port 8000
-  ```
-
-- **Add new routes:**
-  - Create new files in `app/routers/`
-  - Import and include in `app/main.py`
-
-- **Add new models:**
-  - Create models in `app/models/`
-  - Import in `app/database.py` create_tables function
-
-## API Endpoints
-
-### Models API
-- `GET /api/v1/models/` - List all model requests
-- `GET /api/v1/models/{request_id}` - Get specific model request
-- `POST /api/v1/models/` - Create new model request
-- `PUT /api/v1/models/{request_id}` - Update model request
-- `DELETE /api/v1/models/{request_id}` - Delete model request
-
-### Ollama Chat API
-- `GET /api/v1/ollama/models` - Get available Ollama models
-- `POST /api/v1/ollama/chat` - Chat with an Ollama model using LangGraph
-- `GET /api/v1/ollama/health` - Chat service health check
+The service automatically manages GPU VRAM:
+- **`OLLAMA_MAX_LOADED_MODELS: "1"`** - Only 1 model in VRAM at a time
+- **`OLLAMA_KEEP_ALIVE: "5m"`** - Unload models after 5 minutes of inactivity
+- **Automatic switching** - Models load/unload based on usage
 
 ## Chat Usage
 
-### Get Available Models
+### Simple Chat (auto-generates session)
 ```bash
-curl http://localhost:8000/api/v1/ollama/models
-```
-
-### Chat with a Model
-```bash
-curl -X POST "http://localhost:8000/api/v1/ollama/chat" \
+curl -X POST "http://localhost:8000/api/v1/ollama/chat/" \
   -H "Content-Type: application/json" \
   -d '{
     "message": "Hello, how are you?",
@@ -100,17 +88,14 @@ curl -X POST "http://localhost:8000/api/v1/ollama/chat" \
   }'
 ```
 
-### Chat with Conversation History
+### Continue Conversation (uses existing session)
 ```bash
-curl -X POST "http://localhost:8000/api/v1/ollama/chat" \
+curl -X POST "http://localhost:8000/api/v1/ollama/chat/" \
   -H "Content-Type: application/json" \
   -d '{
     "message": "What did I just ask you?",
     "model_name": "llama3.1:8b",
-    "conversation_history": [
-      {"role": "user", "content": "Hello, how are you?"},
-      {"role": "assistant", "content": "I am doing well, thank you for asking!"}
-    ]
+    "session_id": "uuid-from-previous-response"
   }'
 ```
 
@@ -121,19 +106,10 @@ curl -X POST "http://localhost:8000/api/v1/ollama/chat" \
 - `OLLAMA_MAX_LOADED_MODELS`: Maximum models to keep in memory
 - `OLLAMA_KEEP_ALIVE`: How long to keep models loaded
 
-## Database
+## Code Organization Benefits
 
-- SQLite database with SQLModel ORM
-- Automatic table creation and schema management
-- Session dependency injection for database operations
-- Lifespan management for connection lifecycle
-- Built-in validation with Pydantic integration
-- Chat interaction tracking and analytics
-
-## LangGraph Features
-
-- **State Management**: Typed state management for chat conversations
-- **Workflow Orchestration**: Structured chat processing workflow
-- **Model Integration**: Seamless Ollama model integration
-- **Conversation History**: Maintains context across chat sessions
-- **Error Handling**: Robust error handling and validation
+- **Separation of Concerns**: Model management, chat, and database operations are separate
+- **Maintainability**: Each module has a single responsibility
+- **Scalability**: Easy to add new features without affecting existing code
+- **Testing**: Each module can be tested independently
+- **Documentation**: Clear API structure with logical grouping
