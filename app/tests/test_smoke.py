@@ -1,2 +1,3 @@
 def test_smoke():
-	assert True
+    """Test that the tests are running"""
+    assert True

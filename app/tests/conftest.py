@@ -1,8 +1,7 @@
 import os
 from urllib.parse import urlsplit, urlunsplit, SplitResult
 import pytest
-from sqlmodel import create_engine
-import time
+from sqlmodel import create_engine, Session
 from fastapi.testclient import TestClient
 from app import main
 
@@ -24,11 +23,8 @@ ADMIN_URL = urlunsplit(_ADMIN_SPLIT)
 
 
 def set_up_tests():
-    print("tests started")
-    # Point the app to the derived test database for the duration of tests
+    """Set up the test database"""
     os.environ["DATABASE_URL"] = TEST_DB_URL
-
-    # Create the test database if it doesn't exist
     admin_engine = create_engine(ADMIN_URL, pool_pre_ping=True, isolation_level="AUTOCOMMIT")
     with admin_engine.connect() as conn:
         exists = conn.exec_driver_sql(
@@ -36,16 +32,12 @@ def set_up_tests():
         ).scalar() is not None
         if not exists:
             conn.exec_driver_sql(f"CREATE DATABASE \"{TEST_DB_NAME}\"")
-    print(f"Test database {TEST_DB_NAME} created")
-    time.sleep(30)
 
 
 def tear_down_tests():
-    print("tests finished")
-    # Drop the derived test database
+    """Tear down the test database"""
     admin_engine = create_engine(ADMIN_URL, pool_pre_ping=True, isolation_level="AUTOCOMMIT")
     with admin_engine.connect() as conn:
-        # Terminate active connections to allow drop
         conn.exec_driver_sql(
             f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{TEST_DB_NAME}' AND pid <> pg_backend_pid()"
         )
@@ -53,7 +45,8 @@ def tear_down_tests():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _session_setup_teardown():
+def session_setup_teardown():
+    """Set up and tear down the test database"""
     set_up_tests()
     yield
     tear_down_tests()
@@ -64,3 +57,11 @@ def client():
     """FastAPI TestClient bound to the app. Uses app lifespan (DB init/close)."""
     with TestClient(main.app) as c:
         yield c
+
+
+@pytest.fixture(scope="function")
+def session():
+    """Provide a SQLModel Session bound to the test database for tests that request 'session'."""
+    engine = create_engine(TEST_DB_URL, pool_pre_ping=True)
+    with Session(engine) as s:
+        yield s
