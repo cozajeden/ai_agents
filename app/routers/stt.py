@@ -31,34 +31,28 @@ async def transcribe_audio(
         JSON response with transcribed text and metadata
     """
     try:
-        # Validate file type
         if not audio_file.content_type or not audio_file.content_type.startswith('audio/'):
             raise HTTPException(
                 status_code=400, 
                 detail="File must be an audio file"
             )
         
-        # Read audio file content
         audio_content = await audio_file.read()
         
-        # Create temporary file for Whisper processing
         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{audio_file.filename.split('.')[-1] if '.' in audio_file.filename else 'wav'}") as temp_file:
             temp_file.write(audio_content)
             temp_file_path = temp_file.name
         
         try:
-            # Load Whisper model (this will download the model on first use)
             logger.info("Loading Whisper model...")
-            model = whisper.load_model("base")  # You can change to "tiny", "small", "medium", "large" based on your needs
+            model = whisper.load_model(model)
             
-            # Transcribe audio
             logger.info("Transcribing audio...")
             if language:
                 result = model.transcribe(temp_file_path, language=language)
             else:
                 result = model.transcribe(temp_file_path)
             
-            # Clean up temporary file
             os.unlink(temp_file_path)
             
             return JSONResponse(
@@ -74,7 +68,6 @@ async def transcribe_audio(
             )
             
         except Exception as e:
-            # Clean up temp file if it exists
             if os.path.exists(temp_file_path):
                 os.unlink(temp_file_path)
             logger.error(f"Transcription failed: {str(e)}")
@@ -84,7 +77,6 @@ async def transcribe_audio(
             )
             
     except HTTPException:
-        # Re-raise HTTP exceptions
         raise
     except Exception as e:
         logger.error(f"Error processing audio file: {str(e)}")
@@ -99,8 +91,7 @@ async def stt_health_check():
     Health check for STT service.
     """
     try:
-        # Try to load Whisper model to check if it's available
-        model = whisper.load_model("tiny")  # Use tiny model for quick health check
+        model = whisper.load_model("tiny")
         return {
             "service": "stt",
             "status": "healthy",
