@@ -3,9 +3,14 @@ FROM python:3.13-slim
 # Set working directory
 WORKDIR /app
 
-# Install curl for health checks
+# Install system dependencies including FFmpeg for audio processing
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        ffmpeg \
+        gcc \
+        g++ \
+        git \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies

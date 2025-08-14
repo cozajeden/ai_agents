@@ -15,3 +15,6 @@ pytest-cov
 pytest-mock
 psycopg2-binary
 asyncpg
+pydub
+numpy
+openai-whisper

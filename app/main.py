@@ -4,6 +4,7 @@ from .database import init_db, close_db
 from .routers.models.ollama import router as ollama_models_router
 from .routers.database_models import router as database_models_router
 from .routers import chat
+from .routers import stt
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -24,6 +25,7 @@ app = FastAPI(
 app.include_router(ollama_models_router, prefix="/ollama/models", tags=["ollama-models"])
 app.include_router(database_models_router, prefix="/models", tags=["database-models"])
 app.include_router(chat.router, prefix="/chat", tags=["chat"])
+app.include_router(stt.router, prefix="/stt", tags=["speech-to-text"])
 
 @app.get("/")
 async def root():
