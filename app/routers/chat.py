@@ -26,6 +26,14 @@ class ChatResponse(BaseModel):
     session_id: str
     processing_time: float
 
+class PullModelRequest(BaseModel):
+    model: str
+
+class PullModelResponse(BaseModel):
+    status: str
+    model: str
+    detail: Optional[dict] = None
+
 @router.post("/", response_model=ChatResponse)
 def chat_with_model(request: ChatRequest, db: Session = Depends(get_db)):
     """Chat with an Ollama model using LangGraph"""
@@ -114,3 +122,31 @@ def chat_health_check():
             "error": str(e),
             "ollama_url": chat_agent.ollama_base_url
         }
+
+@router.post("/models/reload")
+def reload_available_models():
+    """Reload available Ollama models after initialization"""
+    chat_agent._load_available_models()
+    return {"models": chat_agent.get_available_models()}
+
+@router.post("/models/pull", response_model=PullModelResponse)
+def pull_model(body: PullModelRequest):
+    """Pull an Ollama model by name (e.g., "llama3.1:8b")."""
+    import httpx
+    try:
+        with httpx.Client(timeout=None) as client:
+            resp = client.post(
+                f"{chat_agent.ollama_base_url}/api/pull",
+                json={"name": body.model},
+            )
+            resp.raise_for_status()
+            detail = None
+            try:
+                detail = resp.json()
+            except Exception:
+                detail = {"raw": resp.text}
+            chat_agent._load_available_models()
+            return PullModelResponse(status="ok", model=body.model, detail=detail)
+    except httpx.HTTPError as e:
+        message = e.response.text if getattr(e, "response", None) is not None else str(e)
+        raise HTTPException(status_code=400, detail=f"Pull failed for {body.model}: {message}")
